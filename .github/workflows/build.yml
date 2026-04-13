@@ -62,12 +62,12 @@ jobs:
         shell: pwsh
         working-directory: IniParser
         run: |
-          $vcxproj = Get-ChildItem -Recurse -Filter "*.vcxproj" | Select-Object -First 1
+          $vcxproj = Get-ChildItem -Recurse -Filter "*.vcxproj" | Where-Object { $_.Name -notlike "*test*" } | Select-Object -First 1
           if ($vcxproj) {
             Write-Host "Building: $($vcxproj.FullName)"
-            msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /m
+            msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=10.0 /p:PlatformToolset=v143 /m /v:minimal
           }
-          Get-ChildItem -Recurse -Filter "*.lib"
+          Get-ChildItem -Recurse -Filter "*.lib" | ForEach-Object { Write-Host $_.FullName }
 
       # ---------- Detours (Microsoft) ----------
       - name: Checkout Detours
@@ -97,9 +97,9 @@ jobs:
         run: |
           $vcxproj = Get-ChildItem -Recurse -Filter "*.vcxproj" | Select-Object -First 1
           if ($vcxproj) {
-            msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /m
+            msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=10.0 /p:PlatformToolset=v143 /m /v:minimal
           }
-          Get-ChildItem -Recurse -Filter "*.lib"
+          Get-ChildItem -Recurse -Filter "*.lib" | ForEach-Object { Write-Host $_.FullName }
 
       # ---------- Stage deps ----------
       - name: Stage dependencies into mactype/deps and root
@@ -155,10 +155,11 @@ jobs:
         shell: pwsh
         working-directory: mactype
         run: |
-          msbuild gdipp.vcxproj /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          msbuild gdipp.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=10.0 /p:PlatformToolset=v143 /m /v:minimal
           Write-Host "=== Built output ==="
-          Get-ChildItem -Recurse -Filter "gdipp*.dll" -ErrorAction SilentlyContinue
-          Get-ChildItem -Recurse -Filter "*.dll" -Path "x64/Release" -ErrorAction SilentlyContinue
+          Get-ChildItem -Recurse -Filter "gdipp*.dll" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+          Get-ChildItem -Recurse -Filter "MacType*.dll" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
+          if (Test-Path "x64/Release") { Get-ChildItem "x64/Release" }
 
       - name: Upload artifacts
         if: always()
