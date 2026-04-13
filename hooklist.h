@@ -69,6 +69,7 @@ HOOK_DEFINE(BOOL, ExtTextOutW, (HDC hdc, int nXStart, int nYStart, UINT fuOption
 HOOK_DEFINE(BOOL, RemoveFontResourceExW, (__in LPCWSTR name, __in DWORD fl, __reserved PVOID pdv), (name, fl, pdv))
 //HOOK_DEFINE(BOOL, RemoveFontResourceW, (__in LPCWSTR lpFileName))
 HOOK_DEFINE(HGDIOBJ, GetStockObject, (__in int i), (i))
+HOOK_DEFINE(BOOL, SystemParametersInfoW, (UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni), (uiAction, uiParam, pvParam, fWinIni))
 HOOK_DEFINE(BOOL, BeginPath, (HDC hdc), (hdc))
 HOOK_DEFINE(BOOL, EndPath, (HDC hdc), (hdc))
 HOOK_DEFINE(BOOL, AbortPath, (HDC hdc), (hdc));

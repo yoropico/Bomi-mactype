@@ -7,3 +7,4 @@ Rel*/
 x64/
 *.vcxproj.user
 *.DotSettings.user
+.claude/

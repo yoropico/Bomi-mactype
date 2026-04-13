@@ -617,6 +617,27 @@ HGDIOBJ WINAPI IMPL_GetStockObject(__in int i)
 		default: return ORIG_GetStockObject(i);
 	}
 	return ORIG_GetStockObject(i);
+}
+
+// Hook SPI_GETNONCLIENTMETRICS so Electron/Chromium/modern apps that query the
+// system UI font via SystemParametersInfoW get the substituted font from
+// [FontSubstitutes]. This complements the legacy GetStockObject(DEFAULT_GUI_FONT)
+// path which only covers classic Win32 apps.
+BOOL WINAPI IMPL_SystemParametersInfoW(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni)
+{
+	BOOL ret = ORIG_SystemParametersInfoW(uiAction, uiParam, pvParam, fWinIni);
+	if (ret && uiAction == SPI_GETNONCLIENTMETRICS && pvParam && uiParam >= sizeof(NONCLIENTMETRICSW)) {
+		NONCLIENTMETRICSW* ncm = (NONCLIENTMETRICSW*)pvParam;
+		const CGdippSettings* pSettings = CGdippSettings::GetInstance();
+		if (pSettings && pSettings->FontSubstitutes() >= SETTING_FONTSUBSTITUTE_SAFE) {
+			pSettings->CopyForceFont(ncm->lfCaptionFont,   ncm->lfCaptionFont);
+			pSettings->CopyForceFont(ncm->lfSmCaptionFont, ncm->lfSmCaptionFont);
+			pSettings->CopyForceFont(ncm->lfMenuFont,      ncm->lfMenuFont);
+			pSettings->CopyForceFont(ncm->lfStatusFont,    ncm->lfStatusFont);
+			pSettings->CopyForceFont(ncm->lfMessageFont,   ncm->lfMessageFont);
+		}
+	}
+	return ret;
 
 }
 

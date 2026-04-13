@@ -1,0 +1,166 @@
+name: Build MacType (x64 Release)
+
+on:
+  push:
+    branches: [directwrite]
+  pull_request:
+    branches: [directwrite]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout MacType
+        uses: actions/checkout@v4
+        with:
+          path: mactype
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      # ---------- FreeType (snowie2000 fork) ----------
+      - name: Checkout FreeType (snowie2000 fork)
+        uses: actions/checkout@v4
+        with:
+          repository: snowie2000/freetype
+          path: freetype
+
+      - name: Apply FreeType patch (glyph_to_bitmapex.diff)
+        shell: pwsh
+        working-directory: freetype
+        run: |
+          git apply --verbose ../mactype/doc/glyph_to_bitmapex.diff
+        continue-on-error: true
+
+      - name: Build FreeType x64 (static)
+        shell: pwsh
+        working-directory: freetype
+        run: |
+          $vcxproj = Get-ChildItem -Recurse -Filter "freetype.vcxproj" | Select-Object -First 1
+          if (-not $vcxproj) { Write-Error "freetype.vcxproj not found"; exit 1 }
+          Write-Host "Building: $($vcxproj.FullName)"
+          msbuild $vcxproj.FullName /p:Configuration="Release Multithreaded" /p:Platform=x64 /m
+          Write-Host "=== Built .lib files ==="
+          Get-ChildItem -Recurse -Filter "freetype*.lib"
+
+      # ---------- IniParser (snowie2000 fork) ----------
+      - name: Checkout IniParser
+        uses: actions/checkout@v4
+        with:
+          repository: snowie2000/IniParser
+          path: IniParser
+
+      - name: Build IniParser x64
+        shell: pwsh
+        working-directory: IniParser
+        run: |
+          $vcxproj = Get-ChildItem -Recurse -Filter "*.vcxproj" | Select-Object -First 1
+          if ($vcxproj) {
+            Write-Host "Building: $($vcxproj.FullName)"
+            msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /m
+          }
+          Get-ChildItem -Recurse -Filter "*.lib"
+
+      # ---------- Detours (Microsoft) ----------
+      - name: Checkout Detours
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/Detours
+          path: Detours
+
+      - name: Build Detours x64
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.Component.MSBuild -find VC\Auxiliary\Build\vcvars64.bat`) do set "VCVARS=%%i"
+          call "%VCVARS%"
+          cd Detours\src
+          nmake
+
+      # ---------- wow64ext (snowie2000 fork) ----------
+      - name: Checkout wow64ext
+        uses: actions/checkout@v4
+        with:
+          repository: snowie2000/rewolf-wow64ext
+          path: wow64ext
+
+      - name: Build wow64ext x64
+        shell: pwsh
+        working-directory: wow64ext
+        run: |
+          $vcxproj = Get-ChildItem -Recurse -Filter "*.vcxproj" | Select-Object -First 1
+          if ($vcxproj) {
+            msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /m
+          }
+          Get-ChildItem -Recurse -Filter "*.lib"
+
+      # ---------- Stage deps ----------
+      - name: Stage dependencies into mactype/deps and root
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path mactype/deps/lib | Out-Null
+          New-Item -ItemType Directory -Force -Path mactype/deps/include | Out-Null
+          New-Item -ItemType Directory -Force -Path mactype/lib | Out-Null
+
+          # FreeType libs
+          Get-ChildItem -Recurse -Path freetype -Filter "freetype*.lib" | ForEach-Object {
+            Copy-Item $_.FullName mactype/deps/lib -Force
+            Copy-Item $_.FullName mactype/lib -Force
+          }
+
+          # Detours libs + headers (detours.lib / detours64.lib per HOWTOBUILD.md)
+          Get-ChildItem -Recurse -Path Detours -Filter "detours.lib" | ForEach-Object {
+            Copy-Item $_.FullName mactype/ -Force
+            Copy-Item $_.FullName (Join-Path mactype 'detours64.lib') -Force
+            Copy-Item $_.FullName mactype/deps/lib -Force
+          }
+          if (Test-Path Detours/include) {
+            Copy-Item Detours/include/*.h mactype/deps/include -Force
+          }
+
+          # IniParser libs
+          Get-ChildItem -Recurse -Path IniParser -Filter "*.lib" | ForEach-Object {
+            Copy-Item $_.FullName mactype/deps/lib -Force
+            Copy-Item $_.FullName mactype/lib -Force
+          }
+
+          # wow64ext libs
+          Get-ChildItem -Recurse -Path wow64ext -Filter "wow64ext*.lib" | ForEach-Object {
+            Copy-Item $_.FullName mactype/deps/lib -Force
+            Copy-Item $_.FullName mactype/lib -Force
+          }
+
+          Write-Host "=== mactype/lib contents ==="
+          Get-ChildItem mactype/lib
+          Write-Host "=== mactype/deps/lib contents ==="
+          Get-ChildItem mactype/deps/lib
+          Write-Host "=== mactype/ root .lib ==="
+          Get-ChildItem mactype/*.lib
+
+      - name: Set env vars for MacType build
+        shell: pwsh
+        run: |
+          "FREETYPE_PATH=$env:GITHUB_WORKSPACE\freetype" >> $env:GITHUB_ENV
+          "INI_PARSER_PATH=$env:GITHUB_WORKSPACE\IniParser" >> $env:GITHUB_ENV
+
+      # ---------- Build MacType ----------
+      - name: Build MacType gdipp x64 Release
+        shell: pwsh
+        working-directory: mactype
+        run: |
+          msbuild gdipp.vcxproj /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          Write-Host "=== Built output ==="
+          Get-ChildItem -Recurse -Filter "gdipp*.dll" -ErrorAction SilentlyContinue
+          Get-ChildItem -Recurse -Filter "*.dll" -Path "x64/Release" -ErrorAction SilentlyContinue
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mactype-build-output
+          path: |
+            mactype/x64/Release/*.dll
+            mactype/x64/Release/*.pdb
+            mactype/Release/*.dll
+          if-no-files-found: warn
