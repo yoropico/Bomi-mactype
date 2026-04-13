@@ -153,15 +153,17 @@ jobs:
           "INI_PARSER_PATH=$env:GITHUB_WORKSPACE\IniParser" >> $env:GITHUB_ENV
 
       # ---------- Build MacType ----------
-      - name: Build MacType gdipp x64 Release
+      - name: Build MacType gdipp x64 (Rel+Detours)
         shell: pwsh
         working-directory: mactype
         run: |
-          msbuild gdipp.vcxproj /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=10.0 /p:PlatformToolset=v143 /m /v:minimal
+          # Use Rel+Detours config — links against Detours (not EasyHook).
+          # Available configs: Release, Rel+Detours, Rel+Trace, Release Infinality,
+          # Release+StaticHook, Debug, Debug Infinality, EXE.
+          msbuild gdipp.vcxproj /p:Configuration="Rel+Detours" /p:Platform=x64 /p:WindowsTargetPlatformVersion=10.0 /p:PlatformToolset=v143 /m /v:minimal
           Write-Host "=== Built output ==="
           Get-ChildItem -Recurse -Filter "gdipp*.dll" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
           Get-ChildItem -Recurse -Filter "MacType*.dll" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-          if (Test-Path "x64/Release") { Get-ChildItem "x64/Release" }
 
       - name: Upload artifacts
         if: always()
@@ -169,7 +171,8 @@ jobs:
         with:
           name: mactype-build-output
           path: |
-            mactype/x64/Release/*.dll
-            mactype/x64/Release/*.pdb
+            mactype/x64/**/*.dll
+            mactype/x64/**/*.pdb
+            mactype/Rel+Detours/**/*.dll
             mactype/Release/*.dll
           if-no-files-found: warn
