@@ -91,14 +91,13 @@ jobs:
           repository: snowie2000/rewolf-wow64ext
           path: wow64ext
 
-      - name: Build wow64ext x64
+      - name: Locate wow64ext library
         shell: pwsh
         working-directory: wow64ext
         run: |
-          $vcxproj = Get-ChildItem -Recurse -Filter "*.vcxproj" | Select-Object -First 1
-          if ($vcxproj) {
-            msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /p:WindowsTargetPlatformVersion=10.0 /p:PlatformToolset=v143 /m /v:minimal
-          }
+          # wow64ext ships pre-built (x86 only; not required for pure x64 MacType)
+          # but HOWTOBUILD.md mentions it as a dep so we copy whatever .lib is present
+          Write-Host "=== wow64ext .lib files ==="
           Get-ChildItem -Recurse -Filter "*.lib" | ForEach-Object { Write-Host $_.FullName }
 
       # ---------- Stage deps ----------
