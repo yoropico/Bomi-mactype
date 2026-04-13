@@ -623,6 +623,14 @@ HGDIOBJ WINAPI IMPL_GetStockObject(__in int i)
 // system UI font via SystemParametersInfoW get the substituted font from
 // [FontSubstitutes]. This complements the legacy GetStockObject(DEFAULT_GUI_FONT)
 // path which only covers classic Win32 apps.
+//
+// Additionally, force lfCharSet to match the active code page. Some legacy
+// tray menus (iCloud, Google Drive, noMeiryoUI) route their MBCS text bytes
+// through LOGFONT.lfCharSet for ANSI->Unicode conversion. If the system NCM
+// was ever written with SHIFTJIS_CHARSET or DEFAULT_CHARSET on a Korean box,
+// those apps decode CP949 bytes as CP932, producing mojibake like "伯爵寺剛"
+// instead of "일시 정지". Deriving the charset from GetACP() restores the
+// correct code page regardless of what the system NCM holds.
 BOOL WINAPI IMPL_SystemParametersInfoW(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni)
 {
 	BOOL ret = ORIG_SystemParametersInfoW(uiAction, uiParam, pvParam, fWinIni);
@@ -635,6 +643,16 @@ BOOL WINAPI IMPL_SystemParametersInfoW(UINT uiAction, UINT uiParam, PVOID pvPara
 			pSettings->CopyForceFont(ncm->lfMenuFont,      ncm->lfMenuFont);
 			pSettings->CopyForceFont(ncm->lfStatusFont,    ncm->lfStatusFont);
 			pSettings->CopyForceFont(ncm->lfMessageFont,   ncm->lfMessageFont);
+
+			CHARSETINFO csi = {0};
+			if (TranslateCharsetInfo((DWORD*)(DWORD_PTR)GetACP(), &csi, TCI_SRCCODEPAGE)) {
+				BYTE cs = (BYTE)csi.ciCharset;
+				ncm->lfCaptionFont.lfCharSet   = cs;
+				ncm->lfSmCaptionFont.lfCharSet = cs;
+				ncm->lfMenuFont.lfCharSet      = cs;
+				ncm->lfStatusFont.lfCharSet    = cs;
+				ncm->lfMessageFont.lfCharSet   = cs;
+			}
 		}
 	}
 	return ret;
