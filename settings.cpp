@@ -498,24 +498,7 @@ void CGdippSettings::GetOSVersion() {
 	memset(&info, 0, sizeof(OSVERSIONINFO));
 	info.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 
-	// GetVersionEx is shimmed to return 6.2 in host processes that do not declare
-	// a Win10/11 supportedOS GUID. gdipp.dll is injected into arbitrary hosts so
-	// we cannot rely on the host manifest; RtlGetVersion returns the real version.
-	typedef LONG (WINAPI *PFN_RtlGetVersion)(PVOID);
-	HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-	PFN_RtlGetVersion pRtlGetVersion = hNtdll
-		? (PFN_RtlGetVersion)GetProcAddress(hNtdll, "RtlGetVersion")
-		: NULL;
-	if (pRtlGetVersion && pRtlGetVersion(&info) == 0 /* STATUS_SUCCESS */) {
-		m_dwOSMajorVer = info.dwMajorVersion;
-		m_dwOSMinorVer = info.dwMinorVersion;
-		return;
-	}
-
-#pragma warning(push)
-#pragma warning(disable: 4996)
 	GetVersionEx(&info);
-#pragma warning(pop)
 	m_dwOSMajorVer = info.dwMajorVersion;
 	m_dwOSMinorVer = info.dwMinorVersion;
 }
