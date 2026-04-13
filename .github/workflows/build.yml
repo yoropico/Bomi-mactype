@@ -41,9 +41,15 @@ jobs:
           $vcxproj = Get-ChildItem -Recurse -Filter "freetype.vcxproj" | Select-Object -First 1
           if (-not $vcxproj) { Write-Error "freetype.vcxproj not found"; exit 1 }
           Write-Host "Building: $($vcxproj.FullName)"
-          msbuild $vcxproj.FullName /p:Configuration="Release Multithreaded" /p:Platform=x64 /m
+          # List available configurations
+          [xml]$x = Get-Content $vcxproj.FullName
+          $configs = $x.Project.ItemGroup.ProjectConfiguration | ForEach-Object { "$($_.Configuration)|$($_.Platform)" } | Sort-Object -Unique
+          Write-Host "=== Available configurations ==="
+          $configs | ForEach-Object { Write-Host "  $_" }
+          # Try standard Release x64 first
+          msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /m /v:minimal
           Write-Host "=== Built .lib files ==="
-          Get-ChildItem -Recurse -Filter "freetype*.lib"
+          Get-ChildItem -Recurse -Filter "freetype*.lib" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
 
       # ---------- IniParser (snowie2000 fork) ----------
       - name: Checkout IniParser
