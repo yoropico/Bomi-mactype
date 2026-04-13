@@ -41,13 +41,8 @@ jobs:
           $vcxproj = Get-ChildItem -Recurse -Filter "freetype.vcxproj" | Select-Object -First 1
           if (-not $vcxproj) { Write-Error "freetype.vcxproj not found"; exit 1 }
           Write-Host "Building: $($vcxproj.FullName)"
-          # List available configurations
-          [xml]$x = Get-Content $vcxproj.FullName
-          $configs = $x.Project.ItemGroup.ProjectConfiguration | ForEach-Object { "$($_.Configuration)|$($_.Platform)" } | Sort-Object -Unique
-          Write-Host "=== Available configurations ==="
-          $configs | ForEach-Object { Write-Host "  $_" }
-          # Try standard Release x64 first
-          msbuild $vcxproj.FullName /p:Configuration=Release /p:Platform=x64 /m /v:minimal
+          # Use 'Release Static' which produces a true static .lib (not DLL import stub)
+          msbuild $vcxproj.FullName /p:Configuration="Release Static" /p:Platform=x64 /m /v:minimal
           Write-Host "=== Built .lib files ==="
           Get-ChildItem -Recurse -Filter "freetype*.lib" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
 
@@ -108,10 +103,18 @@ jobs:
           New-Item -ItemType Directory -Force -Path mactype/deps/include | Out-Null
           New-Item -ItemType Directory -Force -Path mactype/lib | Out-Null
 
-          # FreeType libs
-          Get-ChildItem -Recurse -Path freetype -Filter "freetype*.lib" | ForEach-Object {
-            Copy-Item $_.FullName mactype/deps/lib -Force
-            Copy-Item $_.FullName mactype/lib -Force
+          # FreeType libs — rename to freetype64.lib because MacType x64 links
+          # against that explicit name (AdditionalDependencies in gdipp.vcxproj).
+          # Find the largest lib (real static, not DLL import stub).
+          $ft = Get-ChildItem -Recurse -Path freetype -Filter "freetype*.lib" |
+                Sort-Object Length -Descending | Select-Object -First 1
+          if ($ft) {
+            Write-Host "Using FreeType lib: $($ft.FullName) ($($ft.Length) bytes)"
+            Copy-Item $ft.FullName (Join-Path 'mactype/deps/lib' 'freetype64.lib') -Force
+            Copy-Item $ft.FullName (Join-Path 'mactype/lib' 'freetype64.lib') -Force
+            # Also provide freetype.lib (some configs link 32-bit name)
+            Copy-Item $ft.FullName (Join-Path 'mactype/deps/lib' 'freetype.lib') -Force
+            Copy-Item $ft.FullName (Join-Path 'mactype/lib' 'freetype.lib') -Force
           }
 
           # Detours libs + headers (detours.lib / detours64.lib per HOWTOBUILD.md)
